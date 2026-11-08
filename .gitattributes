@@ -1,0 +1,8 @@
+# Linux side must stay LF, WinPE side must be CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.ini text eol=crlf
+*.wim binary
+*.iso binary
+*.efi binary
+*.kpxe binary

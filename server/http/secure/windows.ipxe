@@ -1,0 +1,41 @@
+#!ipxe
+# Served only after nginx accepted the Windows (technician) password.
+# Every file below is fetched with the same credentials, then the password
+# is cleared before booting.
+
+set sec http://${username:uristring}:${password:uristring}@${srv}/secure
+
+:menu
+menu Windows - password accepted. Install still ERASES a disk.
+item install  Windows 10 / 11 install (asks for the disk again)
+item console  WinPE service console (no install)
+item --gap --
+item back     << Back
+choose --default back target || goto back
+goto ${target}
+
+:install
+set mode install
+goto winpe
+:console
+set mode console
+goto winpe
+
+:winpe
+kernel ${sec}/wimboot?${q}
+initrd -n BCD          ${sec}/BCD?${q}
+initrd -n boot.sdi     ${sec}/boot.sdi?${q}
+initrd -n boot.wim     ${sec}/boot.wim?${q}
+initrd -n winpeshl.ini ${sec}/${mode}/winpeshl.ini?${q}
+iseq ${mode} install && initrd -n install.cmd ${sec}/install/install.cmd?${q} ||
+clear password
+boot || goto failed
+
+:failed
+echo WinPE failed to start. Check the server log.
+sleep 5
+goto back
+
+:back
+clear password
+chain ${base}/menu.ipxe?${q}

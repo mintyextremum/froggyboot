@@ -1,0 +1,48 @@
+#!ipxe
+# Live systems and tools. Nothing here changes disks without a human.
+
+:menu
+menu Live systems and tools
+item memtest    Memtest86+ - RAM test
+item gparted    GParted Live - manual partitioning
+item sysrescue  SystemRescue - recovery and diagnostics
+item --gap --
+item shell      iPXE shell
+item reboot     Reboot
+item poweroff   Power off
+item back       << Back
+choose target || goto back
+goto ${target}
+
+:memtest
+iseq ${platform} efi && goto memtest_efi ||
+kernel ${base}/tools/memtest/memtest64.bin?${q}
+boot || goto menu
+:memtest_efi
+chain ${base}/tools/memtest/memtest64.efi?${q} || goto menu
+
+:gparted
+set g ${base}/tools/gparted
+kernel ${g}/vmlinuz?${q} initrd=initrd.img boot=live union=overlay username=user config components noswap fetch=${g}/filesystem.squashfs
+initrd -n initrd.img ${g}/initrd.img?${q}
+boot || goto menu
+
+:sysrescue
+set s ${base}/tools/sysrescue
+kernel ${s}/sysresccd/boot/x86_64/vmlinuz?${q} initrd=sysresccd.img archisobasedir=sysresccd archiso_http_srv=${s}/ ip=dhcp checksum
+initrd -n sysresccd.img ${s}/sysresccd/boot/x86_64/sysresccd.img?${q}
+boot || goto menu
+
+:shell
+echo Type exit to return to the menu
+shell
+goto menu
+
+:reboot
+reboot
+
+:poweroff
+poweroff
+
+:back
+chain ${base}/menu.ipxe?${q}

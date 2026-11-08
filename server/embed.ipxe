@@ -1,0 +1,13 @@
+#!ipxe
+# Embedded into undionly.kpxe / ipxe.efi at build time (see install.sh).
+# Goes straight to the HTTP menu, so the PC never loops through PXE again.
+# If the server is unreachable, the PC boots its local disk.
+
+dhcp || goto fail
+chain http://@SERVER_IP@/menu.ipxe?mac=${net0/mac:hexhyp} || goto fail
+
+:fail
+echo Netboot server unavailable - booting local disk in 5 s
+sleep 5
+iseq ${platform} efi && exit ||
+sanboot --no-describe --drive 0x80 || exit

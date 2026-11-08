@@ -1,0 +1,14 @@
+# /etc/logrotate.d/netboot - keep the netboot journal for 8 weeks.
+/var/log/nginx/netboot.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        invoke-rc.d nginx rotate >/dev/null 2>&1 || true
+    endscript
+}

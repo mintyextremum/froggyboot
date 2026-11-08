@@ -1,0 +1,6 @@
+# Local settings with passwords
+config.env
+# Images never go into git
+*.iso
+*.wim
+*.esd

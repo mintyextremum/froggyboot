@@ -1,0 +1,27 @@
+#!ipxe
+# Linux installers. They ask before touching disks, so no password here.
+# If you add preseed/autoinstall, move the entry to danger.ipxe.
+
+:menu
+menu Linux installers - the installer asks before touching disks
+item debian  Debian 13 (trixie) netinstall - needs Internet for packages
+item ubuntu  Ubuntu Server LTS - whole ISO goes to RAM, needs 8 GB RAM
+item --gap --
+item back    << Back
+choose target || goto back
+goto ${target}
+
+:debian
+set d ${base}/linux/debian
+kernel ${d}/linux?${q} initrd=initrd.gz
+initrd -n initrd.gz ${d}/initrd.gz?${q}
+boot || goto menu
+
+:ubuntu
+set u ${base}/linux/ubuntu
+kernel ${u}/vmlinuz?${q} initrd=initrd ip=dhcp url=${u}/ubuntu-server.iso
+initrd -n initrd ${u}/initrd?${q}
+boot || goto menu
+
+:back
+chain ${base}/menu.ipxe?${q}
