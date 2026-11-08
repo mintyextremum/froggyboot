@@ -14,7 +14,7 @@ froggyboot log -n 50                # события: меню, выбор, вх
 | Симптом | Причина | Решение |
 | --- | --- | --- |
 | ПК не видит PXE, «No boot filename received» | dnsmasq не отвечает в этой сети | `IFACE`, `NET_CIDR` в `config.env`; в `journalctl -u dnsmasq` должны быть строки `PXE(...)`; фаервол: UDP 67, 69, 4011 |
-| iPXE пишет «Netboot server unavailable» | в iPXE старый IP или nginx остановлен | `sudo ./install.sh --rebuild-ipxe`; `systemctl status nginx`; фаервол: TCP 80 |
+| iPXE пишет «No netboot menu» | в iPXE старый IP или nginx остановлен | `sudo ./install.sh --rebuild-ipxe`; `systemctl status nginx`; фаервол: TCP 80 |
 | Меню без имени ПК и без экзамена | приложение остановлено, отдаётся статическая копия | `systemctl status froggyboot`, `journalctl -u froggyboot` |
 | Любой пароль — «Wrong password» | приложение остановлено (зоны закрываются) или неверный пароль | `systemctl status froggyboot`; проверка: `froggyboot log` |
 | `403` на опасную зону с верным паролем | MAC нет в белом списке | `DANGER_MACS` или `danger: true` в `hosts.yml` |

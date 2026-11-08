@@ -7,7 +7,7 @@ dhcp || goto fail
 chain http://@SERVER_IP@/menu.ipxe?mac=${net0/mac:hexhyp} || goto fail
 
 :fail
-echo Netboot server unavailable - booting local disk in 5 s
+echo No netboot menu (server unavailable or no bootable disk) - trying local disk in 5 s
 sleep 5
 iseq ${platform} efi && exit ||
 sanboot --no-describe --drive 0x80 || exit
