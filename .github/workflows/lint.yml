@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the test stand (server + QEMU)
-        run: docker build -q -t froggyboot-stand -f test/stand/Dockerfile .
+        run: docker build --progress=plain -t froggyboot-stand -f test/stand/Dockerfile .
       - name: A virtual PC boots over the network and falls back to its disk
         run: docker run --rm froggyboot-stand check
 

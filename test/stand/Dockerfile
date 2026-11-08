@@ -9,7 +9,7 @@ COPY server/embed.ipxe /embed.ipxe
 RUN sed -i 's|@SERVER_IP@|10.0.2.2|' /embed.ipxe \
  && printf '#define REBOOT_CMD\n#define POWEROFF_CMD\n' > /ipxe/src/config/local/general.h \
  && printf '#define CONSOLE_SERIAL\n' > /ipxe/src/config/local/console.h \
- && make -s -C /ipxe/src -j"$(nproc)" bin/undionly.kpxe EMBED=/embed.ipxe
+ && make -C /ipxe/src -j"$(nproc)" bin/undionly.kpxe EMBED=/embed.ipxe 2>&1 | tail -40; test -f /ipxe/src/bin/undionly.kpxe
 
 FROM debian:trixie-slim
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \

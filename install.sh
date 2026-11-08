@@ -113,7 +113,7 @@ id "$SMB_USER" >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr
 usermod -aG froggyboot "$SMB_USER"
 if [[ "$REPO" != "$OPT" ]]; then
     install -d "$OPT"
-    rm -rf "$OPT/froggyboot" "$OPT/recipes" "$OPT/server" "$OPT/etc" "$OPT/scripts"
+    rm -rf "${OPT:?}/froggyboot" "${OPT:?}/recipes" "${OPT:?}/server" "${OPT:?}/etc" "${OPT:?}/scripts"
     cp -r "$REPO/froggyboot" "$REPO/recipes" "$REPO/server" "$REPO/etc" "$REPO/scripts" "$OPT/"
     install -m 755 "$REPO/install.sh" "$OPT/install.sh"
 fi

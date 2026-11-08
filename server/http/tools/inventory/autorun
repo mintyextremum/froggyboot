@@ -39,7 +39,7 @@ report=$(cat <<EOF
 EOF
 )
 
-for i in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
   if curl -fsS -m 20 -H 'Content-Type: application/json' --data-binary "$report" \
        "http://$SRV/api/inventory?mac=$MAC"; then
     echo; echo "Report sent. Powering off in 10 s."
