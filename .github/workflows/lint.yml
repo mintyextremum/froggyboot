@@ -1,0 +1,39 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash syntax
+        run: for f in install.sh scripts/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck
+        run: shellcheck -S warning install.sh scripts/*.sh
+
+      - name: iPXE / WinPE files are ASCII
+        run: |
+          if grep -rnP '[^\x00-\x7F]' server/embed.ipxe server/http; then
+            echo "Non-ASCII characters found: iPXE and WinPE can't show them"; exit 1
+          fi
+
+      - name: WinPE files use CRLF
+        run: |
+          for f in $(find server/http -name '*.cmd' -o -name '*.ini'); do
+            file "$f" | grep -q CRLF || { echo "$f is not CRLF"; exit 1; }
+          done
+
+      - name: nginx config renders and passes nginx -t
+        run: |
+          sudo apt-get install -y -qq nginx >/dev/null
+          sed -e 's|@NET_CIDR@|192.168.1.0/24|g' server/etc/nginx-netboot.conf \
+            | sudo tee /etc/nginx/sites-enabled/netboot >/dev/null
+          sudo rm -f /etc/nginx/sites-enabled/default
+          echo '    00-1a-2b-3c-4d-5e 1;' | sudo tee /etc/nginx/netboot-danger-macs.conf >/dev/null
+          sudo touch /etc/nginx/netboot-windows.htpasswd /etc/nginx/netboot-danger.htpasswd
+          sudo nginx -t

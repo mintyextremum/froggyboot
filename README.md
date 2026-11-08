@@ -1,8 +1,9 @@
 # Froggyboot
 
-Локальное меню сетевой загрузки для компьютерного класса, по духу как netboot.xyz. Сервер на Debian 13, в меню установщики Linux, live-системы, утилиты и Windows. Работает рядом с чужим роутером: dnsmasq в режиме proxy-DHCP ничего не меняет в сети, а только отвечает на PXE-запросы.
+**A self-hosted network boot menu for computer labs, classrooms and small offices.**
+Any PC on the network boots over PXE and gets one menu with Linux installers, live/rescue systems, hardware tests and **Windows installation**. Images are stored on your own Debian server, so it works offline and without USB sticks.
 
-**Безопасно по умолчанию.** Если ничего не нажать, через 10 секунд грузится локальный диск. Если сервер недоступен, тоже грузится диск. Всё, что стирает диски, закрыто дисклеймером, паролем (его проверяет nginx) и вводом слова-подтверждения.
+[Русская версия](README.ru.md)
 
 ```
 NETBOOT 192.168.1.10   this PC: 192.168.1.57  00-1a-2b-3c-4d-5e  efi
@@ -15,104 +16,172 @@ NETBOOT 192.168.1.10   this PC: 192.168.1.57  00-1a-2b-3c-4d-5e  efi
    [!] Danger zone                            >
 ```
 
-## Что в репозитории
+## Why Froggyboot
 
-| Путь | Куда попадает на сервере |
-| --- | --- |
-| `server/embed.ipxe` | вшивается в `undionly.kpxe` и `ipxe.efi` |
-| `server/http/*.ipxe` | `/srv/netboot/http/`: главное меню, Linux, утилиты |
-| `server/http/secure/` | Windows: `windows.ipxe`, `install.cmd`, `winpeshl.ini` (пароль техника) |
-| `server/http/danger/` | `danger.ipxe`: Clonezilla, ShredOS (пароль админа + белый список MAC) |
-| `server/etc/` | шаблоны конфигов dnsmasq, nginx, Samba, logrotate |
-| `install.sh` | ставит пакеты, подставляет настройки, собирает iPXE, включает службы |
-| `scripts/fetch-debian.sh` | скачивает сетевой установщик Debian и сверяет SHA-256 |
-| `scripts/verify-images.sh` | перепроверяет все образы по `/srv/netboot/http/SHA256SUMS` |
-| `docs/PLACARD.md` | дисклеймер на русском для таблички в классе |
+You look after 1–10 rooms of PCs, you have no Windows Server or SCCM budget, and the router belongs to someone else. You do have an old PC that can run Debian.
 
-В шаблонах стоят метки `@SERVER_IP@`, `@IFACE@`, `@NET_CIDR@` и другие. `install.sh` заменяет их значениями из `config.env`.
+- **Works next to an existing DHCP server.** dnsmasq runs in proxy-DHCP mode: the router keeps assigning IP addresses, and Froggyboot only answers PXE requests. You don't change anything on the network.
+- **Windows included.** Public menus like netboot.xyz can't ship Windows. Your local server can, because the images are yours and never leave the LAN.
+- **Safe by default.** With no key pressed, the local disk boots after 10 seconds. If the server is down, the local disk boots too. So network boot can stay first in the BIOS boot order on every PC.
+- **Destructive actions are hard to reach.** Anything that erases a disk sits behind a disclaimer, a password checked by the server, and a typed confirmation.
+- **Every choice is logged.** You see which PC (MAC, IP) picked which item, and when.
+- **No custom backend.** It's built from dnsmasq, nginx, Samba and plain-text `.ipxe` files. You can read every line and change it.
 
-## Установка
+### Compared with similar tools
 
-На чистом Debian 13 со статическим IP в сети класса:
+| | Froggyboot | netboot.xyz | WDS + MDT | FOG | iVentoy |
+| --- | --- | --- | --- | --- | --- |
+| Windows install | yes | no | yes | via cloning | yes |
+| Linux installers / live | yes | yes | no | limited | yes |
+| Needs Windows Server | no | no | yes | no | no |
+| Works next to a foreign DHCP | yes | yes | with tweaks | yes | yes |
+| Password-protected destructive items | yes | no | n/a | n/a | no |
+| Open source | yes | yes | no | yes | no |
 
-```bash
-git clone <repo> froggyboot && cd froggyboot
-cp config.env.example config.env
-nano config.env          # SERVER_IP, IFACE, NET_CIDR, SMB_PASS, DANGER_MACS
-sudo ./install.sh        # спросит пароли: tech (Windows) и admin (опасная зона)
-sudo ./scripts/fetch-debian.sh
+Treat this table as an overview. Check the current versions of the other tools before relying on it.
+
+## What's in the menu
+
+| Section | Item | Protection | Internet |
+| --- | --- | --- | --- |
+| Main | Boot from local disk (default) | – | no |
+| Linux | Debian 13 netinstall | the installer asks before partitioning | for packages |
+| Linux | Ubuntu Server LTS (ISO in RAM, 8 GB RAM) | the installer asks | no |
+| Tools | Memtest86+, GParted Live, SystemRescue, iPXE shell, reboot / power off | – | no |
+| Windows | Windows 10 / 11 install, WinPE console | disclaimer + password + `ERASE` + disk choice in WinPE | no |
+| Danger zone | Clonezilla, ShredOS (nwipe) | separate password + MAC whitelist (+ `WIPE`) | no |
+
+Adding your own entries: see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md).
+
+## How it works
+
+```
+ PC firmware ──PXE──> router DHCP (IP)  +  dnsmasq proxy-DHCP (boot file name)
+      │
+      └─TFTP─> iPXE (undionly.kpxe / ipxe.efi, with an embedded script)
+                 │
+                 └─HTTP─> nginx: menu.ipxe ──> kernels, initrds, WinPE
+                                │                 (/secure, /danger: basic auth)
+                                └─ access log: time, IP, MAC, user, file
+ WinPE install.cmd ──SMB (read-only)──> Samba: install.wim, drivers, unattend.xml
 ```
 
-Скрипт можно запускать повторно: образы в `/srv` он не трогает, пароли не перезаписывает. Если сменился `SERVER_IP` или изменён `embed.ipxe`, запусти `sudo ./install.sh --rebuild-ipxe`.
+1. The PC boots over PXE. The router gives it an IP address, and dnsmasq adds the iPXE file name.
+2. iPXE loads the menu over HTTP. If the server doesn't answer, the PC boots its local disk.
+3. After 10 seconds of inactivity, the menu boots the local disk: `exit` on UEFI, `sanboot` on BIOS.
+4. Protected items go through the warning, a login, and a typed `ERASE`. Only then does nginx serve the files.
+5. For Windows, wimboot loads WinPE into RAM. Then `install.cmd` lists the disks and waits for `ERASE <disk number>`.
 
-Перед первым запуском:
+## Requirements
 
-- **Предупреди сисадмина сети.** Покажи, что это proxy-DHCP: IP по-прежнему раздаёт роутер.
-- **Настрой порядок загрузки на ПК: «сеть, потом диск».** В UEFI команда `exit` передаёт управление следующему пункту порядка загрузки. Если диск стоит раньше сети, меню не появится. Если после сети ничего нет, машина вернётся в меню прошивки.
-- **Отключи Secure Boot.** В MVP iPXE не подписан.
+- A Debian 13 server with a static IP in the PC network. Any old PC works. Plan disk space for the images: about 30–60 GB.
+- Client PCs that can boot over the network (PXE), in BIOS or UEFI mode.
+- On UEFI, the boot order must be **network, then disk**. On UEFI, `exit` hands control to the next boot entry.
+- Secure Boot off on clients for now (signed chain is on the roadmap).
+- Let the network admin know first. Show them that this is proxy-DHCP, not a second DHCP server.
 
-## Образы
-
-Пока образа нет, его пункт в меню просто возвращает в меню. В конце работы `install.sh` показывает список, где каждый образ отмечен как `[ok]` или `[missing]`.
-
-| Пункт | Что положить |
-| --- | --- |
-| Debian 13 | `scripts/fetch-debian.sh` |
-| Ubuntu Server | из ISO: `casper/vmlinuz` и `casper/initrd` в `linux/ubuntu/`, сам ISO — как `linux/ubuntu/ubuntu-server.iso`. ISO целиком грузится в ОЗУ, нужно 8 ГБ |
-| Memtest86+ | `memtest64.bin` и `memtest64.efi` из архива «Linux binary» на memtest.org в `tools/memtest/` |
-| GParted Live | из ZIP: `live/vmlinuz`, `live/initrd.img`, `live/filesystem.squashfs` в `tools/gparted/` |
-| SystemRescue | распаковать весь ISO в `tools/sysrescue/` (должен появиться `sysresccd/boot/x86_64/vmlinuz`) |
-| Clonezilla | `live/vmlinuz` и `live/initrd.img` в `danger/clonezilla/`, `live/filesystem.squashfs` в `blobs/clonezilla/` (открыт: пароль не должен попасть в командную строку ядра) |
-| ShredOS | `bzImage` в `danger/shredos/`. Проверь, что в релизе есть отдельное ядро, а не только образ флешки |
-| WinPE | из ADK + WinPE add-on: `BCD`, `boot.sdi`, `boot.wim` в `secure/` (`wimboot` скачивает `install.sh`) |
-| Windows | `install.wim` (или `.esd`) из ISO с сайта Microsoft в `/srv/images/windows/` |
-
-Пути указаны относительно `/srv/netboot/http/`.
-
-**Проверка образов.** Сравни SHA-256 с официальным и только после этого добавь строку в список:
+## Quick start
 
 ```bash
-cd /srv/netboot/http && sha256sum tools/memtest/memtest64.efi >> SHA256SUMS
+git clone https://github.com/mintyextremum/froggyboot.git
+cd froggyboot
+cp config.env.example config.env
+nano config.env                  # SERVER_IP, IFACE, NET_CIDR, SMB_PASS, DANGER_MACS
+sudo ./install.sh                # asks for the 'tech' (Windows) and 'admin' (danger zone) passwords
+sudo ./scripts/fetch-debian.sh   # first working menu entry, checksum-verified
+```
+
+Now boot a PC from the network. The menu should appear, and with no key pressed, the local disk boots after 10 seconds.
+
+`install.sh` is safe to run again. It never touches images in `/srv`, and it keeps existing passwords. If you change `SERVER_IP` or `server/embed.ipxe`, run `sudo ./install.sh --rebuild-ipxe`.
+
+If a firewall (`ufw`, `nftables`) is enabled, allow UDP 67, 69 and 4011, and TCP 80 and 445 from the PC subnet.
+
+## Adding images
+
+An image that isn't there yet doesn't break anything: its menu item just returns to the menu. At the end, `install.sh` prints which images are `[ok]` and which are `[missing]`.
+
+Paths are relative to `/srv/netboot/http/`.
+
+| Item | What to put there |
+| --- | --- |
+| Debian 13 | `sudo ./scripts/fetch-debian.sh` |
+| Ubuntu Server | `casper/vmlinuz` and `casper/initrd` from the ISO → `linux/ubuntu/`, the ISO itself → `linux/ubuntu/ubuntu-server.iso` |
+| Memtest86+ | `memtest64.bin` and `memtest64.efi` (the "Linux binary" archive on memtest.org) → `tools/memtest/` |
+| GParted Live | `live/vmlinuz`, `live/initrd.img`, `live/filesystem.squashfs` from the ZIP → `tools/gparted/` |
+| SystemRescue | the whole ISO extracted → `tools/sysrescue/` (you should get `sysresccd/boot/x86_64/vmlinuz`) |
+| Clonezilla | `live/vmlinuz`, `live/initrd.img` → `danger/clonezilla/`. `live/filesystem.squashfs` → `blobs/clonezilla/` (public on purpose, so the password never lands on the kernel command line) |
+| ShredOS | `bzImage` → `danger/shredos/`. Pick a release that ships a separate kernel, not only a USB image |
+| WinPE | `BCD`, `boot.sdi`, `boot.wim` from the Windows ADK + WinPE add-on → `secure/`. `install.sh` downloads `wimboot` |
+| Windows | `install.wim` or `.esd` from an official Microsoft ISO → `/srv/images/windows/` |
+
+**Windows extras** in `/srv/images/windows/`:
+
+- `drivers/`: `.inf` drivers (Intel VMD/RST, network). They are loaded before the disk list is shown and added to the installed system.
+- `unattend.xml`: if present, it is copied to `Windows\Panther\`.
+
+You don't rebuild `boot.wim` when you edit the scripts. wimboot injects `winpeshl.ini` and `install.cmd` at boot time.
+
+**Checksums.** Compare each image with the official hash before you add it to the list:
+
+```bash
+cd /srv/netboot/http && sha256sum tools/memtest/memtest64.efi   # compare with the vendor's sum
+sha256sum tools/memtest/memtest64.efi >> SHA256SUMS
 sudo ./scripts/verify-images.sh
 ```
 
-### Дополнительно для Windows (папка `/srv/images/windows/`)
+## Safety layers
 
-- `drivers/`: `.inf`-драйверы (Intel VMD/RST, сеть). `install.cmd` загружает их до показа дисков, а после установки добавляет в Windows.
-- `unattend.xml`: при наличии копируется в `Windows\Panther\`.
+**Layer 1, the iPXE menu**
 
-`boot.wim` пересобирать не нужно: wimboot подкладывает `winpeshl.ini` и `install.cmd` в `X:\Windows\System32` при загрузке.
+1. The local disk boots by default after 10 seconds. `Esc` on the main menu boots the local disk too.
+2. Destructive items are marked `[!]` and have no hotkeys, so one stray keypress can't select them.
+3. A disclaimer screen comes first. "Back" is preselected, and it auto-returns after 30 seconds.
+4. Login and password are checked by nginx (HTTP basic auth). Without them, the Windows menu and WinPE files are simply not served.
+5. You type `ERASE` in capitals.
 
-## Как устроена защита
+**Layer 2, WinPE**
 
-**Рубеж 1, меню iPXE**
+6. The disk list is shown, and you pick the disk number by hand and type `ERASE <number>`. Empty input cancels and reboots. Partitioning only ever uses the chosen disk.
 
-1. Через 10 секунд грузится локальный диск.
-2. Опасные пункты отмечены `[!]`, у них нет горячих клавиш.
-3. Экран-дисклеймер: по умолчанию выбрано «Back», через 30 секунд меню возвращается назад.
-4. Логин и пароль. Их проверяет nginx: без пароля `windows.ipxe` и файлы WinPE просто не скачиваются.
-5. Ввод `ERASE` заглавными.
+**Danger zone.** It has a separate `admin` password, and a MAC whitelist enforced by nginx on the whole `/danger/` folder.
 
-**Рубеж 2, WinPE**
-
-6. Список дисков, ручной выбор номера и ввод `ERASE <номер>`. Пустой ввод отменяет установку. Разметка берёт только выбранный диск.
-
-**Опасная зона.** Отдельный пароль `admin` и белый список MAC (`DANGER_MACS`). Белый список nginx проверяет на всей папке `/danger/`, а не только на меню. Для ShredOS дополнительно нужно ввести `WIPE`.
-
-**Журнал.** Каждый запрос несёт `?mac=...`, поэтому журнал nginx показывает время, IP, MAC, пользователя и выбранный файл:
+**Logging.** Each request carries `?mac=...`, so `/var/log/nginx/netboot.log` shows the time, IP, MAC, user and file. Logs are kept for 8 weeks.
 
 ```bash
 grep -E 'secure|danger' /var/log/nginx/netboot.log
 ```
 
-Журнал хранится 8 недель (logrotate).
+Hang a printed warning next to the PCs: [docs/PLACARD.md](docs/PLACARD.md).
 
-**Честные ограничения.** Пароль идёт по обычному HTTP, MAC можно подделать, Secure Boot выключен. Всё это защищает от случайности и любопытных, но не от злоумышленника в той же сети. HTTPS в iPXE и подписанная цепочка shim → iPXE запланированы. Пароль Samba лежит в `install.cmd` за паролем техника, а у пользователя `winpe` права только на чтение.
+**Limits, stated honestly.** Read [SECURITY.md](SECURITY.md). In short: the password travels over plain HTTP, and MAC addresses can be spoofed. This protects against accidents and curious users, not against an attacker on the same LAN.
 
-## Дорожная карта
+## Repository layout
 
-- **v0.1 (этот репозиторий):** меню, Debian/Ubuntu, утилиты, Windows за паролем, журнал.
-- **v0.2–v0.3:** меню генерируется из YAML; Fedora, Arch, Alpine, Mint; apt-cacher-ng; HTTPS в iPXE.
-- **v1.0:** веб-панель (журнал, пароли, назначения), автоустановка класса, `.deb`-пакет, Secure Boot.
+| Path | Goes to |
+| --- | --- |
+| `server/embed.ipxe` | embedded into `undionly.kpxe` and `ipxe.efi` |
+| `server/http/*.ipxe` | `/srv/netboot/http/`: main menu, Linux, tools |
+| `server/http/secure/` | Windows menu, `install.cmd`, `winpeshl.ini` (behind the technician password) |
+| `server/http/danger/` | Clonezilla, ShredOS (behind the admin password and the MAC whitelist) |
+| `server/etc/` | dnsmasq, nginx, Samba, logrotate templates |
+| `install.sh` | installs packages, renders templates, builds iPXE, enables services |
+| `scripts/` | `fetch-debian.sh`, `verify-images.sh` |
 
-Windows раздаётся только во внутренней сети: никаких публичных зеркал.
+Templates use placeholders like `@SERVER_IP@`. `install.sh` fills them in from `config.env`.
+
+## Troubleshooting
+
+Common problems and fixes are in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): no menu, UEFI drops into firmware setup, WinPE can't find disks, and more.
+
+## Roadmap
+
+- **v0.1 (now):** menu, Debian/Ubuntu, tools, password-protected Windows, logging.
+- **v0.2–0.3:** generate menus from one YAML file; Fedora, Arch, Alpine, Mint; apt-cacher-ng; HTTPS inside iPXE.
+- **v1.0:** web panel (logs, passwords, assignments), unattended install of a whole room, `.deb` package, Secure Boot via shim.
+
+Ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licensing notes
+
+Froggyboot is released under the [MIT](LICENSE) license. iPXE and wimboot are downloaded and built on your server and keep their own GPL licenses. Windows images must come from Microsoft and stay inside your network. Never publish them on a public mirror. Activation is the PC owner's responsibility.
