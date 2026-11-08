@@ -3,7 +3,7 @@
 # nginx at 10.0.2.2, so no bridge, no root and no real network are touched.
 FROM debian:trixie-slim AS ipxe
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-      git ca-certificates make gcc binutils perl liblzma-dev mtools >/dev/null
+      git ca-certificates make gcc libc6-dev binutils perl liblzma-dev mtools >/dev/null
 RUN git clone -q --depth 1 https://github.com/ipxe/ipxe.git /ipxe
 COPY server/embed.ipxe /embed.ipxe
 RUN sed -i 's|@SERVER_IP@|10.0.2.2|' /embed.ipxe \

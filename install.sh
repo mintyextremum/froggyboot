@@ -25,7 +25,7 @@ grep -qE '^(ID|ID_LIKE)=.*debian' /etc/os-release || warn "Not Debian - continui
 # ---------- packages ----------
 log "Installing packages"
 export DEBIAN_FRONTEND=noninteractive
-PKGS=(dnsmasq nginx apache2-utils samba curl ca-certificates openssl git make gcc binutils perl
+PKGS=(dnsmasq nginx apache2-utils samba curl ca-certificates openssl git make gcc libc6-dev binutils perl
       liblzma-dev mtools libarchive-tools wimtools python3 python3-fastapi python3-uvicorn
       python3-jinja2 python3-yaml python3-passlib)
 ARCH="$(uname -m)"

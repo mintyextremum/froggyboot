@@ -19,7 +19,7 @@ Priority: optional
 Architecture: all
 Maintainer: Froggyboot contributors <noreply@github.com>
 Depends: python3, python3-fastapi, python3-uvicorn, python3-jinja2, python3-yaml, python3-passlib,
- dnsmasq, nginx, samba, apache2-utils, curl, openssl, git, make, gcc, perl, liblzma-dev, mtools,
+ dnsmasq, nginx, samba, apache2-utils, curl, openssl, git, make, gcc, libc6-dev, perl, liblzma-dev, mtools,
  libarchive-tools, wimtools
 Homepage: https://github.com/mintyextremum/froggyboot
 Description: PXE boot menu server for computer classrooms
