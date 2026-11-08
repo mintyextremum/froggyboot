@@ -1,27 +1,33 @@
-# Security model
+# Модель безопасности
 
-Froggyboot is built to stop **accidents and curious users**. It does not stop a determined attacker on the same LAN. PXE can't stop such an attacker in general. Please say so in your own documentation too.
+Froggyboot защищает от **случайностей и любопытных**. От целенаправленной атаки в той же сети PXE в принципе не защищает.
 
-## What is protected
+## Что защищено
 
-- **Safe defaults.** The timeout, a missing server and `Esc` all lead to booting the local disk.
-- **Server-side passwords.** nginx (HTTP basic auth) won't serve `windows.ipxe`, `danger.ipxe` or the WinPE files without valid credentials. No password is stored in the public `menu.ipxe`.
-- **Two separate passwords.** `tech` opens Windows only. `admin` opens the danger zone. Rotate them regularly, for example every term.
-- **MAC whitelist on the whole `/danger/` folder.**
-- **The password doesn't linger.** It is cleared after the files are fetched, and it is never put on a kernel command line.
-- **Network scope.** dnsmasq answers on one interface only. nginx and Samba serve only the configured subnet. The Samba share is read-only, and SMBv1 is off.
-- **The `install.cmd` file**, which contains the read-only Samba password, can be read only by nginx and is served only behind the `tech` password.
-- **Logs.** Every request is logged with time, IP, MAC and user, and logs are kept for 8 weeks.
+- **Безопасное поведение по умолчанию.** Таймаут, недоступный сервер и `Esc` ведут к загрузке с диска.
+- **Проверка на сервере.** nginx отдаёт файлы `/secure/` и `/danger/` только после проверки приложением. Если приложение остановлено, зоны закрыты. В открытом меню паролей нет.
+- **Разделение ролей.** `tech` — только Windows; `admin` — всё, включая панель.
+- **Одноразовые коды.** Срок задаётся при создании; после первого ввода код работает 15 минут и только на этом MAC. В базе хранится только хеш.
+- **Подтверждение.** `ask` открывает зону для одного MAC на 15 минут после решения администратора в панели или Telegram. Кнопки Telegram принимаются только из настроенного чата.
+- **Назначения.** Токен назначения действует для одного MAC, один раз, не дольше суток.
+- **Белый список MAC** для опасной зоны, проверяется на всей папке `/danger/`.
+- **Пароль не задерживается.** После загрузки файлов `clear password`; в командную строку ядра пароль не попадает.
+- **HTTPS (`HTTPS=yes`).** Свой центр сертификации вшивается в iPXE; `/secure/`, `/danger/` и панель по HTTP закрыты.
+- **Сеть.** dnsmasq отвечает на одном интерфейсе, nginx и Samba — только подсети ПК, приложение слушает 127.0.0.1. SMBv1 выключен.
+- **Samba.** `images` — только чтение; `incoming` — запись отчётов и копий. Пароль Samba лежит в `install.cmd` за паролем зоны Windows.
+- **Журнал.** Время, IP, MAC, пользователь и действие; запросы nginx хранятся 8 недель, события — 60 дней.
 
-## Known limits
+## Известные ограничения
 
-| Limit | Consequence | Plan |
-| --- | --- | --- |
-| Basic auth over plain HTTP | Credentials can be sniffed on the LAN | HTTPS inside iPXE with an embedded certificate |
-| MAC is supplied by the client | Whitelist can be bypassed by spoofing | It only prevents mistakes; keep the admin password strong |
-| Secure Boot disabled | Unsigned boot chain | shim → signed iPXE |
-| Rogue PXE servers | Another server on the LAN could answer first | Network-level controls (DHCP snooping) |
+| Ограничение | Последствие |
+| --- | --- |
+| MAC задаёт клиент | белый список и привязки обходятся подменой MAC |
+| Без HTTPS пароль идёт открытым текстом | перехват в сети |
+| Главное меню идёт по HTTP | токен назначения виден тому, кто запросит меню с MAC этого ПК; токен открывает только установку Windows на этот MAC |
+| Запись в `incoming` | пароль Samba из `install.cmd` позволяет писать в `incoming` (не в образы) |
+| Secure Boot выключен | цепочка загрузки не подписана; есть экспериментальная схема с MOK |
+| Чужой PXE-сервер | другой сервер в сети может ответить первым; решается на уровне сети (DHCP snooping) |
 
-## Reporting a vulnerability
+## Сообщить об уязвимости
 
-Please open a GitHub security advisory ("Report a vulnerability" on the Security tab) rather than a public issue.
+GitHub → Security → «Report a vulnerability», не публичный issue.

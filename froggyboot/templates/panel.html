@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Froggyboot</title>
+<style>
+:root{--bg:#f6f7f5;--card:#fff;--fg:#1d2420;--mute:#66706a;--line:#dfe3df;--acc:#2f7d4f;
+--off:#c9cfca;--disk:#3c9a5f;--menu:#e0b03c;--installing:#3a7bd5;--installed:#2f7d4f;--error:#d64545;
+--protected:#e07b39;--assigned:#8a5cd6;--inventory:#4aa3a3}
+@media (prefers-color-scheme:dark){:root{--bg:#121513;--card:#1b201d;--fg:#e6ebe7;--mute:#97a29b;--line:#2c332e;--off:#3a423d}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{font-size:18px;margin:0}header .mute{margin-left:auto}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+pre{overflow-x:auto}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+h2{font-size:15px;margin:0 0 10px}.mute{color:var(--mute)}
+.grid{display:grid;gap:6px}.pc{border:2px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;
+background:var(--bg);min-height:52px;user-select:none}.pc.sel{border-color:var(--acc)}
+.pc b{display:block;font-size:13px}.pc small{color:var(--mute);font-size:11px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--mute);margin-top:8px}
+button,select,input{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+select{max-width:100%}button{cursor:pointer}button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}button.bad{color:var(--error)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.alert{border-color:var(--protected);box-shadow:0 0 0 2px color-mix(in srgb,var(--protected) 30%,transparent)}
+code,pre{font-family:ui-monospace,monospace;font-size:12px}pre{white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px;margin:6px 0}
+.big{font-size:28px;letter-spacing:3px;font-weight:700}.wrap{overflow-x:auto}
+@media (max-width:600px){header .mute{margin-left:0}}
+</style>
+</head>
+<body>
+<header><h1>Froggyboot</h1><span id="exambadge"></span><span class="mute" id="meta"></span></header>
+<main>
+  <section id="approvals" hidden class="alert"><h2>Запросы на подтверждение</h2><div id="approvalList"></div></section>
+
+  <section>
+    <h2>Классы</h2>
+    <div id="rooms"></div>
+    <div class="legend" id="legend"></div>
+    <div class="row" id="actions">
+      <span class="mute" id="selinfo">Выбрано: 0</span>
+      <button onclick="selectAll()">Выбрать всё</button><button onclick="clearSel()">Снять выбор</button>
+      <button onclick="wakeSel()">Включить (Wake-on-LAN)</button>
+      <button onclick="showAssign()">Назначить установку Windows</button>
+      <button class="bad" onclick="unassignSel()">Снять назначение</button>
+    </div>
+    <div id="assignForm" hidden>
+      <div class="row">
+        <select id="aEntry"></select><select id="aWim"></select><select id="aIdx"></select>
+        <label>Диск <input id="aDisk" type="number" min="0" max="32" value="0" style="width:64px"></label>
+        <label><input id="aBackup" type="checkbox"> копия C:\Users на сервер</label>
+        <button class="pri" onclick="doAssign()">Назначить</button>
+      </div>
+      <p class="mute">При следующей загрузке выбранные ПК покажут 15-секундное предупреждение и начнут установку сами. Отмена — Esc на ПК или «Снять назначение».</p>
+    </div>
+    <div id="detail"></div>
+  </section>
+
+  <section id="unknownBox" hidden><h2>Незнакомые ПК за неделю</h2><p class="mute">Добавьте их в /etc/froggyboot/hosts.yml:</p><pre id="unknown"></pre></section>
+
+  <section>
+    <h2>Режим экзамена</h2>
+    <div class="row"><select id="examSel"></select><button class="pri" onclick="setExam()">Применить</button>
+    <span class="mute">В меню остаются только загрузка с диска и выбранный пункт.</span></div>
+  </section>
+
+  <section>
+    <h2>Одноразовый код</h2>
+    <div class="row">
+      <select id="cZone"><option value="windows">Windows</option><option value="danger">Опасная зона</option></select>
+      <label>на <input id="cMin" type="number" value="10" min="1" max="1440" style="width:70px"> мин</label>
+      <input id="cMac" placeholder="MAC (необязательно)" style="width:190px">
+      <button class="pri" onclick="newCode()">Создать</button>
+    </div>
+    <div id="codeOut"></div>
+    <p class="mute">На ПК: логин <code>code</code>, пароль — код. После первого ввода код работает 15 минут и только на этом ПК.</p>
+  </section>
+
+  <section><h2>Назначения</h2><div class="wrap" id="assignList"></div></section>
+  <section><h2>Журнал</h2><div class="wrap" id="events"></div></section>
+</main>
+<script>
+const COLORS={off:'выключен / нет данных',disk:'загрузился с диска',menu:'в меню',protected:'в защищённой зоне',
+assigned:'назначена установка',installing:'идёт установка',installed:'установлено',error:'ошибка',inventory:'отчёт о железе'};
+let data=null, sel=new Set(), images=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const t=ts=>ts?new Date(ts*1000).toLocaleString():'';
+async function api(path,opts={}){const r=await fetch('api/'+path,{headers:{'Content-Type':'application/json'},...opts});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
+const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b)});
+function hostLabel(mac){for(const r of data.rooms)for(const h of r.hosts)if(h.mac===mac)return h.name;return mac}
+
+async function load(){
+ try{data=await api('overview')}catch(e){$('meta').textContent='Нет связи с сервером: '+e.message;return}
+ $('meta').textContent=`сервер ${data.server} · v${data.version} · ${data.https?'HTTPS':'HTTP'} · Telegram ${data.telegram?'вкл':'выкл'}`;
+ $('exambadge').innerHTML=data.exam?`<b style="color:var(--protected)">ЭКЗАМЕН: ${esc(data.exam)}</b>`:'';
+ // approvals
+ $('approvals').hidden=!data.approvals.length;
+ $('approvalList').innerHTML=data.approvals.map(a=>`<div class="row"><b>${esc(a.label)}</b> просит доступ к зоне <b>${esc(a.zone)}</b>
+  <span class="mute">${t(a.created)}</span><button class="pri" onclick="decide(${a.id},true)">Разрешить</button>
+  <button class="bad" onclick="decide(${a.id},false)">Отклонить</button></div>`).join('');
+ // rooms
+ $('rooms').innerHTML=data.rooms.length?data.rooms.map(r=>`<h3 style="font-size:14px;margin:12px 0 6px">Кабинет ${esc(r.name)}</h3>
+  <div class="wrap"><div class="grid" style="grid-template-columns:repeat(${r.cols},minmax(90px,1fr))">${r.hosts.map(h=>`
+  <div class="pc ${sel.has(h.mac)?'sel':''}" style="grid-row:${h.row};grid-column:${h.col}" onclick="toggle('${h.mac}')" ondblclick="detail('${h.mac}')"
+   title="${esc(h.mac)}${h.last?'\n'+esc(h.last.kind)+' '+t(h.last.ts):''}">
+   <b><span class="dot" style="background:var(--${h.status})"></span>${esc(h.name)}</b>
+   <small>${esc(COLORS[h.status])}${h.assignment&&['pending','started'].includes(h.assignment.status)?' · '+esc(h.assignment.label):''}</small></div>`).join('')}</div></div>`).join('')
+  :'<p class="mute">Классы не описаны. Заполните /etc/froggyboot/hosts.yml — ПК появятся здесь.</p>';
+ $('legend').innerHTML=Object.entries(COLORS).map(([k,v])=>`<span><span class="dot" style="background:var(--${k})"></span>${v}</span>`).join('');
+ $('selinfo').textContent='Выбрано: '+sel.size+' (двойной клик — подробности)';
+ // unknown
+ $('unknownBox').hidden=!data.unknown.length;
+ $('unknown').textContent=data.unknown.map((u,i)=>`      - {name: pc${String(i+1).padStart(2,'0')}, mac: ${u.mac}}   # ${u.last.kind} ${t(u.last.ts)}`).join('\n');
+ // exam
+ const cur=$('examSel').value;
+ $('examSel').innerHTML='<option value="">Выключен</option>'+data.exam_choices.map(([ref,title])=>`<option value="${esc(ref)}">${esc(title)}</option>`).join('');
+ $('examSel').value=document.activeElement===$('examSel')?cur:(data.exam||'');
+ // assign entries
+ if(!$('aEntry').options.length)$('aEntry').innerHTML=data.install_choices.map(([r,ti])=>`<option value="${esc(r)}">${esc(ti)}</option>`).join('');
+ $('assignList').innerHTML=data.assignments.length?`<table><tr><th>ПК</th><th>Что</th><th>Диск</th><th>Статус</th><th>Кто</th><th></th></tr>${data.assignments.map(a=>`
+  <tr><td>${esc(a.label_host)}</td><td>${esc(a.label)}</td><td>${a.disk}${a.backup?' + копия':''}</td><td>${esc(a.status)}</td>
+  <td>${esc(a.created_by)} ${t(a.created)}</td><td><button class="bad" onclick="unassign('${a.mac}')">Снять</button></td></tr>`).join('')}</table>`:'<p class="mute">Нет назначений.</p>';
+ $('events').innerHTML=`<table><tr><th>Время</th><th>ПК</th><th>Событие</th><th></th></tr>${data.events.map(e=>`
+  <tr><td>${t(e.ts)}</td><td>${e.mac==='00-00-00-00-00-00'?'сервер':esc(e.host)}</td><td>${esc(e.kind)}</td><td class="mute">${esc(e.detail)}</td></tr>`).join('')}</table>`;
+}
+function toggle(m){sel.has(m)?sel.delete(m):sel.add(m);load()}
+function selectAll(){data.rooms.forEach(r=>r.hosts.forEach(h=>sel.add(h.mac)));load()}
+function clearSel(){sel.clear();load()}
+async function decide(id,approve){try{await post('approvals/'+id,{approve})}catch(e){alert(e.message)}load()}
+async function wakeSel(){if(!sel.size)return alert('Выберите ПК');const r=await post('wake',{macs:[...sel]});alert('Отправлено: '+r.sent)}
+async function showAssign(){if(!sel.size)return alert('Выберите ПК');$('assignForm').hidden=false;
+ images=await api('images');if(!images.length){$('aWim').innerHTML='<option>нет образов в /srv/images/windows</option>';return}
+ $('aWim').innerHTML=images.map(i=>`<option>${esc(i.file)}</option>`).join('');$('aWim').onchange=fillIdx;fillIdx()}
+function fillIdx(){const img=images.find(i=>i.file===$('aWim').value);
+ $('aIdx').innerHTML=img&&img.editions.length?img.editions.map(e=>`<option value="${e.index}">${e.index}: ${esc(e.name)}</option>`).join('')
+ :[1,2,3,4,5,6,7,8].map(i=>`<option value="${i}">редакция ${i}</option>`).join('')}
+async function doAssign(){const names=[...sel].map(hostLabel).join(', ');
+ if(!confirm(`Стереть диск ${$('aDisk').value} и переустановить Windows на: ${names}?`))return;
+ try{const r=await post('assign',{macs:[...sel],entry:$('aEntry').value,wim:$('aWim').value,index:+$('aIdx').value,disk:+$('aDisk').value,backup:$('aBackup').checked});
+ alert(`Назначено: ${r.assigned} (${r.label})`);$('assignForm').hidden=true}catch(e){alert(e.message)}load()}
+async function unassign(m){await api('assign/'+m,{method:'DELETE'});load()}
+async function unassignSel(){for(const m of sel)await api('assign/'+m,{method:'DELETE'});load()}
+async function setExam(){await post('exam',{entry:$('examSel').value||null});load()}
+async function newCode(){try{const r=await post('codes',{zone:$('cZone').value,minutes:+$('cMin').value,mac:$('cMac').value.trim()});
+ $('codeOut').innerHTML=`<p>Код для зоны ${esc(r.zone)} на ${r.minutes} мин${r.mac?' для '+esc(r.mac):''}: <span class="big">${esc(r.code)}</span></p>`}catch(e){alert(e.message)}}
+async function detail(mac){const [inv,ev]=await Promise.all([api('inventory?mac='+mac),api('events?limit=30&mac='+mac)]);
+ $('detail').innerHTML=`<h3 style="font-size:14px">${esc(hostLabel(mac))} <span class="mute">${mac}</span></h3>
+ ${inv.length?`<p class="mute">Отчёт о железе от ${t(inv[0].ts)}</p><pre>${esc(JSON.stringify(inv[0].data,null,2))}</pre>`:'<p class="mute">Отчёта о железе нет — загрузите пункт «Hardware report».</p>'}
+ <table>${ev.map(e=>`<tr><td>${t(e.ts)}</td><td>${esc(e.kind)}</td><td class="mute">${esc(e.detail)}</td></tr>`).join('')}</table>`}
+load();setInterval(()=>{if(!document.hidden&&$('assignForm').hidden)load()},5000);
+</script>
+</body>
+</html>

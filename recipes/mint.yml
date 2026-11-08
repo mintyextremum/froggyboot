@@ -1,0 +1,10 @@
+# Linux Mint Cinnamon live. Bump the version in both URL and match for new releases.
+title: Linux Mint 22.2 Cinnamon
+dest: linux/mint
+source:
+  type: sums
+  sums_url: https://mirrors.kernel.org/linuxmint/stable/22.2/sha256sum.txt
+files:
+  - match: linuxmint-22\.2-cinnamon-64bit\.iso
+    extract: {casper/vmlinuz: vmlinuz, casper/initrd.lz: initrd.lz}
+    keep_as: mint.iso

@@ -1,0 +1,11 @@
+#!/bin/sh
+# /usr/local/bin/froggyboot - commands that touch the state database run as the
+# service user, so root never leaves files the app cannot write.
+export PYTHONPATH=/opt/froggyboot
+case "$1" in
+    wake|code|exam|log)
+        if [ "$(id -u)" = 0 ]; then
+            exec runuser -u froggyboot -- /usr/bin/python3 -m froggyboot "$@"
+        fi ;;
+esac
+exec /usr/bin/python3 -m froggyboot "$@"

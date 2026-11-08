@@ -1,0 +1,52 @@
+#!/bin/bash
+# Froggyboot hardware report. SystemRescue downloads this file through
+# ar_source=http://<server>/tools/inventory/ and runs it after boot.
+# It collects hardware facts, posts them to the server and powers the PC off.
+# Nothing is written to the PC's disks.
+
+arg() { tr ' ' '\n' < /proc/cmdline | sed -n "s/^$1=//p" | head -n1; }
+SRV="$(arg froggy_srv)"
+MAC="$(arg froggy_mac)"
+[ -n "$SRV" ] && [ -n "$MAC" ] || { echo "froggy_srv / froggy_mac missing on the kernel command line"; exit 1; }
+
+json_str() { python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))'; }
+dmi() { dmidecode -s "$1" 2>/dev/null | head -n1 | json_str; }
+
+disks="[]"
+if command -v lsblk >/dev/null; then
+  disks="$(lsblk -J -d -b -o NAME,MODEL,SERIAL,SIZE,ROTA,TRAN,TYPE 2>/dev/null | python3 -c 'import json,sys; print(json.dumps([d for d in json.load(sys.stdin)["blockdevices"] if d.get("type")=="disk"]))' 2>/dev/null || echo '[]')"
+fi
+
+smart="{}"
+if command -v smartctl >/dev/null; then
+  smart="$(for d in $(lsblk -dn -o NAME,TYPE | awk '$2=="disk"{print $1}'); do
+      printf '%s\t%s\n' "$d" "$(smartctl -H "/dev/$d" 2>/dev/null | grep -Ei 'overall-health|SMART Health Status' | sed 's/.*: *//')"
+    done | python3 -c 'import json,sys; print(json.dumps(dict(l.rstrip("\n").split("\t",1) for l in sys.stdin if "\t" in l)))')"
+fi
+
+mem_kb="$(awk '/MemTotal/{print $2}' /proc/meminfo)"
+cpu="$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | json_str)"
+cores="$(nproc)"
+temps="$(sensors 2>/dev/null | grep -E '^(Package|Tctl|Core 0)' | json_str)"
+
+report=$(cat <<EOF
+{"vendor": $(dmi system-manufacturer), "product": $(dmi system-product-name),
+ "serial": $(dmi system-serial-number), "bios": $(dmi bios-version),
+ "board": $(dmi baseboard-product-name), "cpu": $cpu, "cores": $cores,
+ "memory_gb": $(awk -v k="$mem_kb" 'BEGIN{printf "%.1f", k/1048576}'),
+ "disks": $disks, "smart": $smart, "temps": $temps,
+ "uefi": $([ -d /sys/firmware/efi ] && echo true || echo false)}
+EOF
+)
+
+for i in 1 2 3 4 5; do
+  if curl -fsS -m 20 -H 'Content-Type: application/json' --data-binary "$report" \
+       "http://$SRV/api/inventory?mac=$MAC"; then
+    echo; echo "Report sent. Powering off in 10 s."
+    sleep 10
+    poweroff
+    exit 0
+  fi
+  sleep 5
+done
+echo "Could not send the report to $SRV. Staying on so you can look around."

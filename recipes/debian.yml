@@ -1,0 +1,9 @@
+# Debian 13 netinstall kernel + initrd, verified against Debian's SHA256SUMS.
+title: Debian 13 (trixie) netinstall, amd64
+dest: linux/debian
+source:
+  type: sums
+  sums_url: https://deb.debian.org/debian/dists/trixie/main/installer-amd64/current/images/SHA256SUMS
+files:
+  - match: netboot/debian-installer/amd64/linux
+  - match: netboot/debian-installer/amd64/initrd\.gz

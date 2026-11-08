@@ -1,0 +1,29 @@
+site_name: Froggyboot
+site_description: Меню сетевой загрузки для компьютерных классов
+repo_url: https://github.com/mintyextremum/froggyboot
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  language: ru
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      toggle: {icon: material/weather-night, name: Тёмная тема}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      toggle: {icon: material/weather-sunny, name: Светлая тема}
+nav:
+  - Обзор: index.md
+  - Установка: INSTALL.md
+  - Панель: PANEL.md
+  - Меню и образы: CUSTOMIZING.md
+  - Secure Boot: SECUREBOOT.md
+  - Проблемы: TROUBLESHOOTING.md
+  - Безопасность: security.md
+  - Участие: contributing.md
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.superfences

@@ -1,0 +1,22 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches froggyboot/__init__.py
+        run: |
+          v="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' froggyboot/__init__.py)"
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != v$v"; exit 1; }
+      - run: bash packaging/build-deb.sh
+      - run: gh release create "$GITHUB_REF_NAME" build/*.deb --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

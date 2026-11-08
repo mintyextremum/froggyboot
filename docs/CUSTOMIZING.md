@@ -1,54 +1,94 @@
-# Customizing the menu
+# Меню, образы, рецепты
 
-The menus are plain iPXE scripts in `server/http/`. Edit them in the repository, then run `sudo ./install.sh` to render and copy them to `/srv/netboot/http/`. You don't need to rebuild iPXE for menu changes.
+Меню задаётся в `/etc/froggyboot/menu.yml`. После правки: `sudo froggyboot render`. Главное меню приложение перечитывает само, подменю записываются в `/srv/netboot/http/`.
 
-Variables available in every menu (set in `menu.ipxe`):
+## Разделы
 
-| Variable | Value |
-| --- | --- |
-| `${srv}` | server IP |
-| `${base}` | `http://<server IP>` |
-| `${q}` | `mac=<client MAC>`. Append `?${q}` to every URL so the access log shows the PC |
-| `${platform}` | `efi` or `pcbios` |
+```yaml
+timeout: 10          # секунд до загрузки с диска
+hide_missing: true   # скрывать пункты, чьих файлов нет на сервере
 
-## Add a Linux live system or installer
-
-1. Put the kernel and initrd under `/srv/netboot/http/linux/<name>/` and record their checksums in `SHA256SUMS`.
-2. Add an item and a label to `server/http/linux.ipxe` or `tools.ipxe`:
-
-```ipxe
-item alpine  Alpine Linux (latest stable) - needs Internet
-
-:alpine
-set a ${base}/linux/alpine
-kernel ${a}/vmlinuz-lts?${q} initrd=initramfs-lts alpine_repo=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main modloop=${a}/modloop-lts ip=dhcp
-initrd -n initramfs-lts ${a}/initramfs-lts?${q}
-boot || goto menu
+sections:
+  - id: linux
+    key: l             # горячая клавиша, только для открытых разделов
+    title: Linux installers
+    zone: open         # open | windows | danger
+    entries: [...]
+  - id: windows
+    title: Windows install
+    zone: windows
+    confirm: ERASE     # слово для ввода перед входом
+    warning: [строки дисклеймера]
+    entries: [...]
 ```
 
-Rules of thumb:
+| Зона | Доступ | Папка файлов |
+| --- | --- | --- |
+| `open` | без пароля | пути от `/srv/netboot/http/` |
+| `windows` | `tech`, `admin`, код, `ask`, назначение | `secure/` |
+| `danger` | `admin`, код, `ask` + белый список MAC | `danger/` |
 
-- Always give the initrd an explicit name with `initrd -n <name>`, and use the same name in `initrd=<name>` on the kernel line. UEFI kernels need this match.
-- End with `boot || goto menu`, so a missing file returns to the menu instead of hanging.
-- Keep the text ASCII. The iPXE console can't show Cyrillic.
+Всё, что ставит систему без вопросов (preseed, autoinstall, kickstart, клонирование, очистка), относится к зонам `windows` или `danger`.
 
-## Add something that erases disks
+## Пункты
 
-Anything that installs without asking (preseed, autoinstall, kickstart, cloning, wiping) goes into `server/http/danger/danger.ipxe`, never into the open menus. Use `${dz}` URLs there so nginx checks the password and the MAC whitelist, and `clear password` before `boot`.
+```yaml
+- id: alpine                       # латиница, цифры, _; уникален во всём меню
+  title: Alpine Linux - needs Internet
+  kernel: linux/alpine/vmlinuz-lts
+  initrd: [linux/alpine/initramfs-lts]
+  args: ip=dhcp modloop=${base}/linux/alpine/modloop-lts
+  confirm: WIPE                    # необязательно: слово перед загрузкой
+```
 
-## Change the timeout or default
+| `kind` | Поля |
+| --- | --- |
+| `linux` (по умолчанию) | `kernel`, `initrd`, `args` |
+| `memtest` | `bios`, `efi` |
+| `wimboot` | `mode: install` или `console`; только в зоне `windows` |
+| `shell`, `reboot`, `poweroff` | — |
 
-In `menu.ipxe`: `choose --default local --timeout 10000 target`. The timeout is in milliseconds. Keep `local` as the default if network boot stays first in the BIOS boot order.
+В `args` доступны переменные iPXE: `${base}` (http://сервер), `${srv}` (IP сервера), `${net0/mac:hexhyp}`.
 
-## Allow another PC into the danger zone
+Текст только ASCII: консоль iPXE не показывает кириллицу. Проверка: `froggyboot check`.
 
-Add its MAC to `DANGER_MACS` in `config.env` and run `sudo ./install.sh` again.
+## Рецепты
 
-## Change passwords
+`froggyboot add <имя>` скачивает файлы, сверяет SHA-256 со списком дистрибутива, распаковывает нужное из ISO и перерисовывает меню.
+
+| Рецепт | Источник контрольных сумм |
+| --- | --- |
+| `debian` | `SHA256SUMS` установщика Debian 13 |
+| `ubuntu-server` | `SHA256SUMS` релиза 24.04 |
+| `alpine` | `latest-releases.yaml` |
+| `fedora` | `.treeinfo` релиза |
+| `arch` | `sha256sums.txt` |
+| `mint` | `sha256sum.txt` релиза |
+
+Рецепт — файл `recipes/<имя>.yml`:
+
+```yaml
+title: Alpine Linux (latest stable) netboot
+dest: linux/alpine
+source:
+  type: alpine            # sums | alpine | treeinfo
+  releases_url: https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml
+files:
+  - match: alpine-netboot-[0-9.]+-x86_64\.tar\.gz      # регулярное выражение по списку сумм
+    extract: {boot/vmlinuz-lts: vmlinuz-lts}            # или extract: all, или без extract
+    keep_as: name.iso                                  # сохранить и сам архив
+```
+
+Версии Fedora и Mint записаны в рецептах и `menu.yml`; для нового релиза меняются в обоих местах.
+
+## Прочее
+
+- Белый список опасной зоны: `DANGER_MACS` в `config.env` или `danger: true` в `hosts.yml`.
+- Пароли:
 
 ```bash
 sudo htpasswd /etc/nginx/netboot-windows.htpasswd tech
 sudo htpasswd /etc/nginx/netboot-danger.htpasswd admin
 ```
 
-You can add more technicians with `htpasswd <file> <name>` (without `-c`). The log will show who did what.
+Дополнительные техники — `htpasswd <файл> <имя>` без `-c`; в журнале видно, кто входил.

@@ -1,0 +1,9 @@
+# Fedora netinstall. Bump the release number here and in etc/menu.yml (inst.repo=) together.
+title: Fedora 43 netinstall
+dest: linux/fedora
+source:
+  type: treeinfo
+  base_url: https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/
+files:
+  - match: images/pxeboot/vmlinuz
+  - match: images/pxeboot/initrd\.img

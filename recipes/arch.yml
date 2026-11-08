@@ -1,0 +1,9 @@
+# Latest Arch ISO, extracted whole: iPXE boots it with archiso_http_srv=.
+title: Arch Linux (latest ISO)
+dest: linux/arch
+source:
+  type: sums
+  sums_url: https://geo.mirror.pkgbuild.com/iso/latest/sha256sums.txt
+files:
+  - match: archlinux-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-x86_64\.iso
+    extract: all

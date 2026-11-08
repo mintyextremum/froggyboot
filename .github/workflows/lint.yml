@@ -1,4 +1,4 @@
-name: lint
+name: tests
 
 on:
   push:
@@ -10,30 +10,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bash syntax
-        run: for f in install.sh scripts/*.sh; do bash -n "$f"; done
-
       - name: ShellCheck
-        run: shellcheck -S warning install.sh scripts/*.sh
+        run: shellcheck -S warning install.sh scripts/*.sh packaging/*.sh test/stand/stand.sh server/etc/froggyboot-cli server/http/tools/inventory/autorun
 
-      - name: iPXE / WinPE files are ASCII
+      - name: WinPE / iPXE files are ASCII, WinPE files use CRLF
         run: |
-          if grep -rnP '[^\x00-\x7F]' server/embed.ipxe server/http; then
+          if grep -rnP '[^\x00-\x7F]' server/embed.ipxe server/http etc/menu.yml froggyboot/templates/ipxe; then
             echo "Non-ASCII characters found: iPXE and WinPE can't show them"; exit 1
           fi
-
-      - name: WinPE files use CRLF
-        run: |
           for f in $(find server/http -name '*.cmd' -o -name '*.ini'); do
             file "$f" | grep -q CRLF || { echo "$f is not CRLF"; exit 1; }
           done
 
-      - name: nginx config renders and passes nginx -t
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -q fastapi uvicorn jinja2 pyyaml passlib httpx pytest
+      - run: pytest -q
+
+  nginx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rendered nginx config passes nginx -t (HTTP and HTTPS variants)
         run: |
           sudo apt-get install -y -qq nginx >/dev/null
-          sed -e 's|@NET_CIDR@|192.168.1.0/24|g' server/etc/nginx-netboot.conf \
-            | sudo tee /etc/nginx/sites-enabled/netboot >/dev/null
           sudo rm -f /etc/nginx/sites-enabled/default
-          echo '    00-1a-2b-3c-4d-5e 1;' | sudo tee /etc/nginx/netboot-danger-macs.conf >/dev/null
           sudo touch /etc/nginx/netboot-windows.htpasswd /etc/nginx/netboot-danger.htpasswd
+          r() { sed -e 's|@NET_CIDR@|192.168.1.0/24|' -e 's|@APP_PORT@|8070|' "$@" server/etc/nginx-netboot.conf | sudo tee /etc/nginx/sites-enabled/netboot >/dev/null; }
+          r -e '/^@HTTPS_LISTEN@$/d' -e '/^@HTTPS_ONLY@$/d'
           sudo nginx -t
+          sudo openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=t -keyout /tmp/k -out /tmp/c 2>/dev/null
+          r -e 's|^@HTTPS_LISTEN@$|    listen 443 ssl; ssl_certificate /tmp/c; ssl_certificate_key /tmp/k;|' \
+            -e 's|^@HTTPS_ONLY@$|        if ($scheme = http) { return 403; }|'
+          sudo nginx -t
+
+  stand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the test stand (server + QEMU)
+        run: docker build -q -t froggyboot-stand -f test/stand/Dockerfile .
+      - name: A virtual PC boots over the network and falls back to its disk
+        run: docker run --rm froggyboot-stand check
+
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash packaging/build-deb.sh
+      - run: dpkg-deb --info build/*.deb && dpkg-deb --contents build/*.deb | head -20
+      - uses: actions/upload-artifact@v4
+        with: {name: deb, path: build/*.deb}

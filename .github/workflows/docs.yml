@@ -1,0 +1,40 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "mkdocs.yml", "README.md", "SECURITY.md", "CONTRIBUTING.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: {group: pages, cancel-in-progress: true}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -q mkdocs-material
+      - name: Build the site from docs/ and the root Markdown files
+        run: |
+          cp README.md docs/index.md
+          cp SECURITY.md docs/security.md
+          cp CONTRIBUTING.md docs/contributing.md
+          sed -i -e 's|(docs/|(|g' -e 's|(SECURITY.md)|(security.md)|g' -e 's|(CONTRIBUTING.md)|(contributing.md)|g' \
+                 -e 's|(LICENSE)|(https://github.com/mintyextremum/froggyboot/blob/main/LICENSE)|g' docs/index.md
+          mkdocs build --strict
+      - uses: actions/upload-pages-artifact@v3
+        with: {path: site}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: {name: github-pages, url: "${{ steps.d.outputs.page_url }}"}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4

@@ -1,30 +1,38 @@
-# Troubleshooting
+# Проблемы и решения
 
-Start with the logs on the server:
+Журналы на сервере:
 
 ```bash
-journalctl -u dnsmasq -f            # PXE / proxy-DHCP / TFTP
-tail -f /var/log/nginx/netboot.log  # which PC asked for which file, and the HTTP status
-tail -f /var/log/nginx/error.log
+journalctl -u dnsmasq -f            # PXE, proxy-DHCP, TFTP
+journalctl -u froggyboot -f         # приложение: меню, проверка паролей, Telegram
+tail -f /var/log/nginx/netboot.log  # какой ПК какой файл запросил и код ответа
+froggyboot log -n 50                # события: меню, выбор, входы, установки
 ```
 
-The menu header shows the server IP, the client's IP and MAC, and the firmware mode. A photo of the screen is usually enough to diagnose a problem.
+В шапке меню видны IP сервера, имя или MAC ПК, его IP и режим (BIOS/UEFI): фото экрана обычно хватает для диагностики.
 
-| Symptom | Likely cause | Fix |
+| Симптом | Причина | Решение |
 | --- | --- | --- |
-| PC never sees PXE, or says "No boot filename received" | dnsmasq not answering on that network | Check `IFACE` and `NET_CIDR` in `config.env`; `journalctl -u dnsmasq` should log `PXE(…)` lines. Firewall: allow UDP 67, 69, 4011 |
-| iPXE starts, then "Netboot server unavailable" | Wrong `SERVER_IP` baked into iPXE, or nginx is down | `sudo ./install.sh --rebuild-ipxe`; `systemctl status nginx`; firewall: TCP 80 |
-| `403` for every file | Client is outside `NET_CIDR` | Fix `NET_CIDR` and run `install.sh` again |
-| `403` on the danger zone with the right password | MAC not in `DANGER_MACS` | Add it, run `install.sh` again |
-| UEFI: "Boot from local disk" opens firmware setup | No entry after network in the UEFI boot order | Put the Windows/Linux boot manager after network boot |
-| BIOS: "Boot from local disk" hangs | Disk isn't `0x80`, or there's no bootloader on it | Remove PXE from the boot order temporarily, or check the disk |
-| Nothing boots with Secure Boot on | iPXE isn't signed | Disable Secure Boot (signed chain is on the roadmap) |
-| Item returns to the menu immediately | Image missing | The last lines of `install.sh` list `[missing]` files |
-| WinPE: "cannot reach \\server\images" | No network driver in `boot.wim`, or Samba down | Add the NIC driver to `/srv/images/windows/drivers/` or to `boot.wim`; `systemctl status smbd`; TCP 445 |
-| WinPE: disk list is empty | Intel VMD / RST controller | Put the Intel RST VMD `.inf` driver in `/srv/images/windows/drivers/`, or switch the controller to AHCI in the BIOS |
-| Windows 11 refuses old hardware | TPM / CPU checks | Use Windows 10, or an `unattend.xml` that matches your licence and policy |
-| `dism /Apply-Image` fails | Corrupt or incomplete WIM | Re-copy it and compare its SHA-256 with the original |
-| Ubuntu installer stops while loading the ISO | Not enough RAM (the whole ISO goes into RAM) | 8 GB RAM, or use Debian netinstall |
-| Neighbouring rooms see the menu | Same broadcast domain | Check `IFACE`; ask the network admin about VLANs |
+| ПК не видит PXE, «No boot filename received» | dnsmasq не отвечает в этой сети | `IFACE`, `NET_CIDR` в `config.env`; в `journalctl -u dnsmasq` должны быть строки `PXE(...)`; фаервол: UDP 67, 69, 4011 |
+| iPXE пишет «Netboot server unavailable» | в iPXE старый IP или nginx остановлен | `sudo ./install.sh --rebuild-ipxe`; `systemctl status nginx`; фаервол: TCP 80 |
+| Меню без имени ПК и без экзамена | приложение остановлено, отдаётся статическая копия | `systemctl status froggyboot`, `journalctl -u froggyboot` |
+| Любой пароль — «Wrong password» | приложение остановлено (зоны закрываются) или неверный пароль | `systemctl status froggyboot`; проверка: `froggyboot log` |
+| `403` на опасную зону с верным паролем | MAC нет в белом списке | `DANGER_MACS` или `danger: true` в `hosts.yml` |
+| `403` на всё | ПК вне `NET_CIDR` | исправить `NET_CIDR`, запустить `install.sh` |
+| HTTPS: «Permission denied» / ошибка сертификата в iPXE | iPXE собран со старым сертификатом | `sudo ./install.sh --rebuild-ipxe` |
+| UEFI: «Boot from local disk» открывает настройки прошивки | после сети в порядке загрузки ничего нет | поставить Windows Boot Manager / диск после сетевой загрузки |
+| BIOS: «Boot from local disk» зависает | диск не `0x80` или на нём нет загрузчика | проверить диск, временно убрать PXE из порядка загрузки |
+| Пункт сразу возвращает в меню | файла нет | `froggyboot render` покажет скрытые пункты; `froggyboot add <рецепт>` |
+| Пункта нет в меню | `hide_missing: true` и файлов нет | положить файлы, `froggyboot render` |
+| WinPE: «cannot reach \\server\images» | нет драйвера сети в `boot.wim` или Samba остановлена | драйвер в `/srv/images/windows/drivers/` или в `boot.wim`; `systemctl status smbd`; TCP 445 |
+| WinPE: список дисков пуст | контроллер Intel VMD / RST | драйвер Intel RST VMD в `drivers/` или режим AHCI в BIOS |
+| Назначение не срабатывает | ПК не загружался по сети, назначение истекло (сутки) или уже стартовало | статус в панели; назначить заново |
+| Нет отчётов установки в панели | WinPE не подключил `\\server\incoming` | `testparm -s`, права `/srv/froggyboot/incoming` (группа froggyboot) |
+| Отчёт о железе не приходит | ISO SystemRescue не распакован или версия без `ar_source` | `tools/sysrescue/`; журнал на экране ПК |
+| Wake-on-LAN не будит ПК | WoL выключен в BIOS или ПК в другой подсети | включить WoL; широковещательный пакет не проходит через роутер |
+| Telegram молчит | неверный токен или id чата, нет доступа к api.telegram.org | `journalctl -u froggyboot \| grep telegram` |
+| Windows 11 отказывается ставиться | проверки TPM и CPU | Windows 10 или `unattend.xml` по вашей лицензии и политике |
+| Ubuntu / Mint зависает на загрузке ISO | мало памяти | 8 ГБ ОЗУ или сетевой установщик Debian |
+| Соседние кабинеты видят меню | общий широковещательный домен | VLAN у сетевого администратора |
 
-Still stuck? Open an issue with the menu header photo, firmware mode, and the matching lines from both logs.
+Issue на GitHub: фото шапки меню, режим загрузки и строки из журналов.

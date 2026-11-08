@@ -1,0 +1,10 @@
+# Newest Ubuntu Server 24.04.x ISO: kernel and initrd are extracted, the ISO is kept for url=.
+title: Ubuntu Server 24.04 LTS
+dest: linux/ubuntu
+source:
+  type: sums
+  sums_url: https://releases.ubuntu.com/24.04/SHA256SUMS
+files:
+  - match: ubuntu-24\.04(\.\d+)?-live-server-amd64\.iso
+    extract: {casper/vmlinuz: vmlinuz, casper/initrd: initrd}
+    keep_as: ubuntu-server.iso

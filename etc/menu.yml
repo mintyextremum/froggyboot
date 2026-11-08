@@ -1,0 +1,114 @@
+# Froggyboot menu. `froggyboot render` turns this file into iPXE scripts.
+# Text must be ASCII: the iPXE console cannot show Cyrillic.
+#
+# zone: open    - no password (installers that ask before touching disks, tools)
+#       windows - technician password + typed confirmation (files in secure/)
+#       danger  - admin password + MAC whitelist (files in danger/)
+# Paths in open sections are relative to /srv/netboot/http,
+# in protected sections to their folder (secure/ or danger/).
+# Entry kinds: linux (default), memtest, wimboot, shell, reboot, poweroff.
+
+timeout: 10          # seconds until "Boot from local disk"
+hide_missing: true   # hide entries whose files are not on the server yet
+
+sections:
+  - id: linux
+    key: l
+    title: Linux installers
+    zone: open
+    entries:
+      - id: debian
+        title: Debian 13 netinstall - needs Internet for packages
+        kernel: linux/debian/linux
+        initrd: [linux/debian/initrd.gz]
+      - id: ubuntu
+        title: Ubuntu Server LTS - ISO goes to RAM, needs 8 GB
+        kernel: linux/ubuntu/vmlinuz
+        initrd: [linux/ubuntu/initrd]
+        args: ip=dhcp url=${base}/linux/ubuntu/ubuntu-server.iso
+      - id: fedora
+        title: Fedora Server netinstall - needs Internet
+        kernel: linux/fedora/vmlinuz
+        initrd: [linux/fedora/initrd.img]
+        args: ip=dhcp inst.repo=https://download.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/
+      - id: alpine
+        title: Alpine Linux - needs Internet for packages
+        kernel: linux/alpine/vmlinuz-lts
+        initrd: [linux/alpine/initramfs-lts]
+        args: ip=dhcp alpine_repo=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main modloop=${base}/linux/alpine/modloop-lts
+      - id: arch
+        title: Arch Linux live / install
+        kernel: linux/arch/arch/boot/x86_64/vmlinuz-linux
+        initrd: [linux/arch/arch/boot/x86_64/initramfs-linux.img]
+        args: ip=dhcp archisobasedir=arch archiso_http_srv=${base}/linux/arch/
+      - id: mint
+        title: Linux Mint live - ISO goes to RAM, needs 8 GB
+        kernel: linux/mint/vmlinuz
+        initrd: [linux/mint/initrd.lz]
+        args: boot=casper ip=dhcp url=${base}/linux/mint/mint.iso
+
+  - id: tools
+    key: t
+    title: Live systems and tools
+    zone: open
+    entries:
+      - id: memtest
+        kind: memtest
+        title: Memtest86+ - RAM test
+        bios: tools/memtest/memtest64.bin
+        efi: tools/memtest/memtest64.efi
+      - id: gparted
+        title: GParted Live - manual partitioning
+        kernel: tools/gparted/vmlinuz
+        initrd: [tools/gparted/initrd.img]
+        args: boot=live union=overlay username=user config components noswap fetch=${base}/tools/gparted/filesystem.squashfs
+      - id: sysrescue
+        title: SystemRescue - recovery and diagnostics
+        kernel: tools/sysrescue/sysresccd/boot/x86_64/vmlinuz
+        initrd: [tools/sysrescue/sysresccd/boot/x86_64/sysresccd.img]
+        args: archisobasedir=sysresccd archiso_http_srv=${base}/tools/sysrescue/ ip=dhcp checksum
+      - id: inventory
+        title: Hardware report - collect info, send to server, power off
+        kernel: tools/sysrescue/sysresccd/boot/x86_64/vmlinuz
+        initrd: [tools/sysrescue/sysresccd/boot/x86_64/sysresccd.img]
+        args: archisobasedir=sysresccd archiso_http_srv=${base}/tools/sysrescue/ ip=dhcp ar_source=${base}/tools/inventory/ ar_nowait ar_nodel froggy_srv=${srv} froggy_mac=${net0/mac:hexhyp}
+      - {id: shell, kind: shell, title: iPXE shell}
+      - {id: reboot, kind: reboot, title: Reboot}
+      - {id: poweroff, kind: poweroff, title: Power off}
+
+  - id: windows
+    title: Windows install
+    zone: windows
+    confirm: ERASE
+    warning:
+      - Installing Windows ERASES the disk of THIS computer.
+      - All files, programs and other systems on it will be lost.
+      - Continue only if you own this PC or have permission.
+      - The authors take no responsibility for lost data.
+      - Your MAC address and the time are logged.
+    entries:
+      - id: win_install
+        kind: wimboot
+        mode: install
+        title: Windows 10 / 11 install (asks for the disk again)
+      - id: win_console
+        kind: wimboot
+        mode: console
+        title: WinPE service console (no install)
+
+  - id: danger
+    title: Danger zone
+    zone: danger
+    warning:
+      - Tools here clone over or wipe disks without further questions.
+      - Only for the server administrator on allowed machines.
+    entries:
+      - id: clonezilla
+        title: Clonezilla Live - save / restore disk images
+        kernel: clonezilla/vmlinuz
+        initrd: [clonezilla/initrd.img]
+        args: boot=live union=overlay username=user config components noswap edd=on nomodeset locales=en_US.UTF-8 keyboard-layouts=NONE ocs_live_run=ocs-live-general ocs_live_batch=no net.ifnames=0 fetch=${base}/blobs/clonezilla/filesystem.squashfs
+      - id: shredos
+        title: ShredOS (nwipe) - WIPE DISKS
+        confirm: WIPE
+        kernel: shredos/bzImage

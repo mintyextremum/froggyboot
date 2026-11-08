@@ -1,0 +1,9 @@
+# Alpine netboot tarball from latest-stable, checked against latest-releases.yaml.
+title: Alpine Linux (latest stable) netboot
+dest: linux/alpine
+source:
+  type: alpine
+  releases_url: https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml
+files:
+  - match: alpine-netboot-[0-9.]+-x86_64\.tar\.gz
+    extract: {boot/vmlinuz-lts: vmlinuz-lts, boot/initramfs-lts: initramfs-lts, boot/modloop-lts: modloop-lts}

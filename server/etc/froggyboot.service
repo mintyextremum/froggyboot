@@ -1,0 +1,21 @@
+[Unit]
+Description=Froggyboot app (dynamic menu, zone auth, panel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=froggyboot
+Group=froggyboot
+Environment=PYTHONPATH=/opt/froggyboot
+ExecStart=/usr/bin/python3 -m froggyboot serve
+Restart=on-failure
+RestartSec=2
+StateDirectory=froggyboot
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/froggyboot
+
+[Install]
+WantedBy=multi-user.target
