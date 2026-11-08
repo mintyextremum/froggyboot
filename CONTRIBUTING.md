@@ -22,5 +22,4 @@ CI runs the same checks. If you changed a menu, say in the PR which firmware you
 
 - Menu entries for more distributions (Fedora, Arch, Alpine, Mint) in `server/http/linux.ipxe`, plus a line in the README table.
 - `scripts/fetch-*.sh` downloaders with checksum verification, modelled on `fetch-debian.sh`.
-- Translations of `docs/PLACARD.md`.
 - Hardware reports in `docs/TROUBLESHOOTING.md`.

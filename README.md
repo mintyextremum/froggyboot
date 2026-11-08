@@ -152,8 +152,6 @@ sudo ./scripts/verify-images.sh
 grep -E 'secure|danger' /var/log/nginx/netboot.log
 ```
 
-Hang a printed warning next to the PCs: [docs/PLACARD.md](docs/PLACARD.md).
-
 **Limits, stated honestly.** Read [SECURITY.md](SECURITY.md). In short: the password travels over plain HTTP, and MAC addresses can be spoofed. This protects against accidents and curious users, not against an attacker on the same LAN.
 
 ## Repository layout
